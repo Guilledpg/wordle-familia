@@ -1,0 +1,356 @@
+code
+Html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <!-- Meta tag crucial para mobile-first y bloquear el zoom táctil -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wordle Familiar</title>
+    
+    <!-- Script oficial de Telegram Web Apps -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        /* ==========================================
+           VARIABLES Y ESTILOS GLOBALES
+           ========================================== */
+        :root {
+            /* Colores del juego Wordle */
+            --color-correct: #538d4e; /* Verde */
+            --color-present: #b59f3b; /* Amarillo */
+            --color-absent: #3a3a3c;  /* Gris oscuro */
+            --color-border: #565758;  /* Borde casillas vacías */
+            
+            /* Variables de Telegram con fallbacks por si se abre en navegador normal */
+            --tg-bg: var(--tg-theme-bg-color, #121213);
+            --tg-text: var(--tg-theme-text-color, #ffffff);
+            --tg-hint: var(--tg-theme-hint-color, #818384);
+            --tg-btn-bg: var(--tg-theme-secondary-bg-color, #818384);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none; /* Evita seleccionar texto al tocar rápido */
+        }
+
+        body {
+            background-color: var(--tg-bg);
+            color: var(--tg-text);
+            font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: manipulation; /* Bloquea el doble toque para zoom */
+        }
+
+        header {
+            text-align: center;
+            padding: 15px 0;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        /* ==========================================
+           TABLERO DE JUEGO
+           ========================================== */
+        #board-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-grow: 1;
+            padding: 10px;
+        }
+
+        #board {
+            display: grid;
+            grid-template-rows: repeat(6, 1fr);
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            width: 100%;
+            max-width: 350px;
+            aspect-ratio: 5/6;
+        }
+
+        .cell {
+            border: 2px solid var(--color-border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        /* ==========================================
+           TECLADO EN PANTALLA
+           ========================================== */
+        #keyboard {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px 8px 20px 8px;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .key {
+            background-color: var(--tg-btn-bg);
+            color: var(--tg-text);
+            border: none;
+            border-radius: 4px;
+            height: 58px;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: background-color 0.2s;
+        }
+
+        .key.large {
+            flex: 1.5;
+            font-size: 0.85rem;
+        }
+
+        /* Estados de colores aplicables a casillas y teclas */
+        .correct { background-color: var(--color-correct) !important; border-color: var(--color-correct) !important; color: white !important; }
+        .present { background-color: var(--color-present) !important; border-color: var(--color-present) !important; color: white !important; }
+        .absent { background-color: var(--color-absent) !important; border-color: var(--color-absent) !important; color: white !important; }
+
+        /* Animación de error */
+        .shake { animation: shake 0.5s; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>WORDLE</header>
+
+    <div id="board-container">
+        <div id="board"></div>
+    </div>
+
+    <div id="keyboard"></div>
+
+    <script>
+        // ==========================================
+        // INICIALIZACIÓN DE TELEGRAM WEB APP
+        // ==========================================
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Expande la app para ocupar toda la pantalla
+        tg.ready();  // Avisa a Telegram que la app está lista
+
+        // ==========================================
+        // VARIABLES DE ESTADO DEL JUEGO
+        // ==========================================
+        const SECRET_WORD = "CACAO"; // Palabra hardcodeada según requisitos
+        const ROWS = 6;
+        const COLS = 5;
+        let currentRow = 0;
+        let currentCol = 0;
+        let gameOver = false;
+        let board = Array(ROWS).fill().map(() => Array(COLS).fill(''));
+
+        // Layout del teclado QWERTY en español
+        const keyboardLayout = [
+            ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Ñ'],
+            ['ENVIAR', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'BORRAR']
+        ];
+
+        // ==========================================
+        // CONSTRUCCIÓN DE LA INTERFAZ
+        // ==========================================
+        function initGame() {
+            const boardElement = document.getElementById('board');
+            const keyboardElement = document.getElementById('keyboard');
+
+            // Crear casillas del tablero
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.setAttribute('id', `cell-${r}-${c}`);
+                    boardElement.appendChild(cell);
+                }
+            }
+
+            // Crear teclado
+            keyboardLayout.forEach(row => {
+                const rowElement = document.createElement('div');
+                rowElement.classList.add('keyboard-row');
+                
+                row.forEach(key => {
+                    const keyElement = document.createElement('button');
+                    keyElement.classList.add('key');
+                    keyElement.textContent = key;
+                    keyElement.setAttribute('id', `key-${key}`);
+                    
+                    if (key === 'ENVIAR' || key === 'BORRAR') {
+                        keyElement.classList.add('large');
+                    }
+
+                    // Evento al tocar la tecla
+                    keyElement.addEventListener('click', () => handleKeyPress(key));
+                    rowElement.appendChild(keyElement);
+                });
+                keyboardElement.appendChild(rowElement);
+            });
+        }
+
+        // ==========================================
+        // LÓGICA DE ENTRADA DE DATOS
+        // ==========================================
+        function handleKeyPress(key) {
+            if (gameOver) return;
+
+            if (key === 'BORRAR') {
+                if (currentCol > 0) {
+                    currentCol--;
+                    board[currentRow][currentCol] = '';
+                    updateBoard();
+                }
+            } else if (key === 'ENVIAR') {
+                if (currentCol === COLS) {
+                    checkGuess();
+                } else {
+                    // Animación de error si faltan letras
+                    const rowCells = getRowCells(currentRow);
+                    rowCells.forEach(cell => {
+                        cell.classList.remove('shake');
+                        void cell.offsetWidth; // Trigger reflow
+                        cell.classList.add('shake');
+                    });
+                    tg.HapticFeedback.notificationOccurred('warning');
+                }
+            } else {
+                if (currentCol < COLS) {
+                    board[currentRow][currentCol] = key;
+                    currentCol++;
+                    updateBoard();
+                }
+            }
+        }
+
+        function updateBoard() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const cell = document.getElementById(`cell-${r}-${c}`);
+                    cell.textContent = board[r][c];
+                }
+            }
+        }
+
+        function getRowCells(row) {
+            const cells = [];
+            for (let c = 0; c < COLS; c++) {
+                cells.push(document.getElementById(`cell-${row}-${c}`));
+            }
+            return cells;
+        }
+
+        // ==========================================
+        // LÓGICA DE VALIDACIÓN Y COLORES
+        // ==========================================
+        function checkGuess() {
+            const guess = board[currentRow].join('');
+            const rowCells = getRowCells(currentRow);
+            
+            // Lógica de Wordle (2 pasadas para manejar letras repetidas correctamente)
+            let secretLetterCounts = {};
+            for (let char of SECRET_WORD) {
+                secretLetterCounts[char] = (secretLetterCounts[char] || 0) + 1;
+            }
+
+            let statuses = Array(COLS).fill('absent');
+
+            // Primera pasada: Encontrar las correctas (Verdes)
+            for (let i = 0; i < COLS; i++) {
+                if (guess[i] === SECRET_WORD[i]) {
+                    statuses[i] = 'correct';
+                    secretLetterCounts[guess[i]] -= 1;
+                }
+            }
+
+            // Segunda pasada: Encontrar las presentes (Amarillas)
+            for (let i = 0; i < COLS; i++) {
+                if (statuses[i] === 'absent' && secretLetterCounts[guess[i]] > 0) {
+                    statuses[i] = 'present';
+                    secretLetterCounts[guess[i]] -= 1;
+                }
+            }
+
+            // Aplicar colores al tablero y al teclado
+            for (let i = 0; i < COLS; i++) {
+                const letter = guess[i];
+                const status = statuses[i];
+                
+                // Colorear casilla
+                rowCells[i].classList.add(status);
+                
+                // Colorear tecla (solo actualiza si es un estado "mejor")
+                const keyElement = document.getElementById(`key-${letter}`);
+                if (!keyElement.classList.contains('correct')) {
+                    if (status === 'correct') {
+                        keyElement.classList.remove('present', 'absent');
+                        keyElement.classList.add('correct');
+                    } else if (status === 'present' && !keyElement.classList.contains('present')) {
+                        keyElement.classList.remove('absent');
+                        keyElement.classList.add('present');
+                    } else if (status === 'absent' && !keyElement.classList.contains('present')) {
+                        keyElement.classList.add('absent');
+                    }
+                }
+            }
+
+            // Comprobar victoria o derrota
+            if (guess === SECRET_WORD) {
+                gameOver = true;
+                tg.HapticFeedback.notificationOccurred('success');
+                setTimeout(() => enviarResultadoAlBot(currentRow + 1), 1500);
+            } else if (currentRow === ROWS - 1) {
+                gameOver = true;
+                tg.HapticFeedback.notificationOccurred('error');
+                setTimeout(() => enviarResultadoAlBot('X'), 1500);
+            } else {
+                currentRow++;
+                currentCol = 0;
+            }
+        }
+
+        // ==========================================
+        // COMUNICACIÓN CON EL BOT DE TELEGRAM
+        // ==========================================
+        function enviarResultadoAlBot(intentos) {
+            // Se envía el dato como string (ej: "3" o "X")
+            tg.sendData(intentos.toString());
+            // Opcional: cerrar la web app explícitamente
+            tg.close();
+        }
+
+        // Iniciar el juego al cargar
+        initGame();
+    </script>
+</body>
+</html>

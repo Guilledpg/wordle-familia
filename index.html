@@ -10,137 +10,60 @@
     <!-- Script oficial de Telegram Web Apps -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-    <style>
-        /* ==========================================
-           VARIABLES Y ESTILOS GLOBALES
-           ========================================== */
-        :root {
-            /* Colores del juego Wordle */
-            --color-correct: #538d4e; /* Verde */
-            --color-present: #b59f3b; /* Amarillo */
-            --color-absent: #3a3a3c;  /* Gris oscuro */
-            --color-border: #565758;  /* Borde casillas vacías */
-            
-            /* Variables de Telegram con fallbacks por si se abre en navegador normal */
-            --tg-bg: var(--tg-theme-bg-color, #121213);
-            --tg-text: var(--tg-theme-text-color, #ffffff);
-            --tg-hint: var(--tg-theme-hint-color, #818384);
-            --tg-btn-bg: var(--tg-theme-secondary-bg-color, #818384);
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none; /* Evita seleccionar texto al tocar rápido */
-        }
-
-        body {
+    body {
             background-color: var(--tg-bg);
             color: var(--tg-text);
-            font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Clear Sans', Arial, sans-serif;
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            /* Usamos hvh para asegurar que ocupe exactamente lo que Telegram nos da */
+            height: 100vh; 
+            margin: 0;
             overflow: hidden;
-            touch-action: manipulation; /* Bloquea el doble toque para zoom */
         }
 
         header {
             text-align: center;
-            padding: 15px 0;
-            font-size: 24px;
+            padding: 10px 0;
+            font-size: 1.2rem;
             font-weight: bold;
-            letter-spacing: 2px;
-            border-bottom: 1px solid var(--color-border);
+            flex-shrink: 0; /* Que el título no se encoja */
         }
 
-        /* ==========================================
-           TABLERO DE JUEGO
-           ========================================== */
         #board-container {
             display: flex;
             justify-content: center;
             align-items: center;
-            flex-grow: 1;
-            padding: 10px;
+            flex-grow: 1; /* El tablero ocupa el espacio sobrante */
+            padding: 5px;
+            min-height: 0; /* Truco de flexbox para que pueda encogerse si es necesario */
         }
 
         #board {
             display: grid;
             grid-template-rows: repeat(6, 1fr);
             grid-template-columns: repeat(5, 1fr);
-            gap: 5px;
-            width: 100%;
-            max-width: 350px;
+            gap: 4px;
+            height: 100%;
+            max-height: 400px; /* Evita que el tablero crezca tanto que pise al teclado */
             aspect-ratio: 5/6;
         }
 
-        .cell {
-            border: 2px solid var(--color-border);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 2rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            transition: background-color 0.3s, border-color 0.3s;
-        }
-
-        /* ==========================================
-           TECLADO EN PANTALLA
-           ========================================== */
         #keyboard {
+            flex-shrink: 0; /* El teclado siempre mantiene su tamaño */
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            padding: 10px 8px 20px 8px;
+            gap: 5px;
+            padding: 10px 5px 25px 5px; /* Más padding abajo para evitar la barra del móvil */
             width: 100%;
-            max-width: 500px;
-            margin: 0 auto;
-        }
-
-        .keyboard-row {
-            display: flex;
-            justify-content: center;
-            gap: 6px;
+            background-color: var(--tg-bg);
         }
 
         .key {
-            background-color: var(--tg-btn-bg);
-            color: var(--tg-text);
-            border: none;
-            border-radius: 4px;
-            height: 58px;
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 1.2rem;
-            font-weight: bold;
-            cursor: pointer;
-            text-transform: uppercase;
-            transition: background-color 0.2s;
+            height: 45px; /* Reducimos un poco la altura de las teclas para ganar espacio */
+            font-size: 0.9rem;
+            /* ... resto de estilos de .key ... */
         }
-
-        .key.large {
-            flex: 1.5;
-            font-size: 0.85rem;
-        }
-
-        /* Estados de colores aplicables a casillas y teclas */
-        .correct { background-color: var(--color-correct) !important; border-color: var(--color-correct) !important; color: white !important; }
-        .present { background-color: var(--color-present) !important; border-color: var(--color-present) !important; color: white !important; }
-        .absent { background-color: var(--color-absent) !important; border-color: var(--color-absent) !important; color: white !important; }
-
-        /* Animación de error */
-        .shake { animation: shake 0.5s; }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-            20%, 40%, 60%, 80% { transform: translateX(5px); }
-        }
-    </style>
 </head>
 <body>
 
@@ -353,5 +276,6 @@
     </script>
 </body>
 </html>
+
 
 

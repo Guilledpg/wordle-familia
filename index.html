@@ -1,281 +1,270 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <!-- Meta tag crucial para mobile-first y bloquear el zoom táctil -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Wordle Familiar by Kalenda</title>
+    <title>Wordle Familiar</title>
     
-    <!-- Script oficial de Telegram Web Apps -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="palabras.js"></script>
 
-    body {
+    <style>
+        :root {
+            --color-correct: #538d4e;
+            --color-present: #b59f3b;
+            --color-absent: #3a3a3c;
+            --color-border: #565758;
+            --tg-bg: var(--tg-theme-bg-color, #121213);
+            --tg-text: var(--tg-theme-text-color, #ffffff);
+            --tg-btn: var(--tg-theme-secondary-bg-color, #818384);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
             background-color: var(--tg-bg);
             color: var(--tg-text);
             font-family: 'Clear Sans', Arial, sans-serif;
             display: flex;
             flex-direction: column;
-            /* Usamos hvh para asegurar que ocupe exactamente lo que Telegram nos da */
-            height: 100vh; 
-            margin: 0;
+            height: 100vh; /* Altura total de la ventana */
             overflow: hidden;
         }
 
         header {
             text-align: center;
             padding: 10px 0;
-            font-size: 1.2rem;
+            font-size: 22px;
             font-weight: bold;
-            flex-shrink: 0; /* Que el título no se encoja */
+            border-bottom: 1px solid var(--color-border);
+            flex-shrink: 0;
         }
 
+        /* Contenedor flexible para el tablero */
         #board-container {
             display: flex;
             justify-content: center;
             align-items: center;
-            flex-grow: 1; /* El tablero ocupa el espacio sobrante */
-            padding: 5px;
-            min-height: 0; /* Truco de flexbox para que pueda encogerse si es necesario */
+            flex-grow: 1; /* Ocupa el espacio entre header y teclado */
+            padding: 10px;
+            min-height: 0; 
         }
 
         #board {
             display: grid;
             grid-template-rows: repeat(6, 1fr);
             grid-template-columns: repeat(5, 1fr);
-            gap: 4px;
+            gap: 5px;
             height: 100%;
-            max-height: 400px; /* Evita que el tablero crezca tanto que pise al teclado */
+            max-height: 380px; /* Evita que pise al teclado */
             aspect-ratio: 5/6;
         }
 
+        .cell {
+            border: 2px solid var(--color-border);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        /* Teclado ajustado para no cortarse */
         #keyboard {
-            flex-shrink: 0; /* El teclado siempre mantiene su tamaño */
             display: flex;
             flex-direction: column;
-            gap: 5px;
-            padding: 10px 5px 25px 5px; /* Más padding abajo para evitar la barra del móvil */
+            gap: 6px;
+            padding: 10px 6px 30px 6px; /* Padding extra abajo */
             width: 100%;
-            background-color: var(--tg-bg);
+            max-width: 500px;
+            margin: 0 auto;
+            flex-shrink: 0;
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            width: 100%;
         }
 
         .key {
-            height: 45px; /* Reducimos un poco la altura de las teclas para ganar espacio */
+            background-color: var(--tg-btn);
+            color: var(--tg-text);
+            border: none;
+            border-radius: 4px;
+            height: 50px;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             font-size: 0.9rem;
-            /* ... resto de estilos de .key ... */
+            font-weight: bold;
+            cursor: pointer;
         }
+
+        .key.large { flex: 1.6; font-size: 0.7rem; }
+
+        /* Colores de acierto */
+        .correct { background-color: var(--color-correct) !important; border-color: var(--color-correct); }
+        .present { background-color: var(--color-present) !important; border-color: var(--color-present); }
+        .absent { background-color: var(--color-absent) !important; border-color: var(--color-absent); }
+
+        /* Animación Shake */
+        .shake { animation: shake 0.4s; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            75% { transform: translateX(6px); }
+        }
+    </style>
 </head>
 <body>
 
-    <header>KALENDA WORDLE LEAGUE </header>
+    <header>WORDLE FAMILIAR</header>
 
     <div id="board-container">
         <div id="board"></div>
     </div>
 
-    <div id="keyboard"></div>
+    <div id="keyboard">
+        <div class="keyboard-row" id="row1"></div>
+        <div class="keyboard-row" id="row2"></div>
+        <div class="keyboard-row" id="row3"></div>
+    </div>
 
     <script>
-        // ==========================================
-        // INICIALIZACIÓN DE TELEGRAM WEB APP
-        // ==========================================
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Expande la app para ocupar toda la pantalla
-        tg.ready();  // Avisa a Telegram que la app está lista
+        tg.expand();
+        tg.ready();
 
-        // ==========================================
-        // VARIABLES DE ESTADO DEL JUEGO
-        // ==========================================
-        const SECRET_WORD = "CACAO"; // Palabra hardcodeada según requisitos
-        const ROWS = 6;
-        const COLS = 5;
+        // 1. Lógica de la palabra diaria basada en tu TXT
+        // Usamos el índice del día para que todos tengan la misma
+        const diasDesdeInicio = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+        const SECRET_WORD = DICCIONARIO[diasDesdeInicio % DICCIONARIO.length].toUpperCase();
+
         let currentRow = 0;
         let currentCol = 0;
         let gameOver = false;
-        let board = Array(ROWS).fill().map(() => Array(COLS).fill(''));
+        let boardState = Array(6).fill().map(() => Array(5).fill(''));
 
-        // Layout del teclado QWERTY en español
-        const keyboardLayout = [
+        // 2. Inicializar Tablero
+        const boardEl = document.getElementById('board');
+        for (let r = 0; r < 6; r++) {
+            for (let c = 0; c < 5; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${r}-${c}`;
+                boardEl.appendChild(cell);
+            }
+        }
+
+        // 3. Inicializar Teclado
+        const keys = [
             ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
             ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Ñ'],
             ['ENVIAR', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'BORRAR']
         ];
 
-        // ==========================================
-        // CONSTRUCCIÓN DE LA INTERFAZ
-        // ==========================================
-        function initGame() {
-            const boardElement = document.getElementById('board');
-            const keyboardElement = document.getElementById('keyboard');
-
-            // Crear casillas del tablero
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    const cell = document.createElement('div');
-                    cell.classList.add('cell');
-                    cell.setAttribute('id', `cell-${r}-${c}`);
-                    boardElement.appendChild(cell);
-                }
-            }
-
-            // Crear teclado
-            keyboardLayout.forEach(row => {
-                const rowElement = document.createElement('div');
-                rowElement.classList.add('keyboard-row');
-                
-                row.forEach(key => {
-                    const keyElement = document.createElement('button');
-                    keyElement.classList.add('key');
-                    keyElement.textContent = key;
-                    keyElement.setAttribute('id', `key-${key}`);
-                    
-                    if (key === 'ENVIAR' || key === 'BORRAR') {
-                        keyElement.classList.add('large');
-                    }
-
-                    // Evento al tocar la tecla
-                    keyElement.addEventListener('click', () => handleKeyPress(key));
-                    rowElement.appendChild(keyElement);
-                });
-                keyboardElement.appendChild(rowElement);
+        keys.forEach((row, idx) => {
+            const rowEl = document.getElementById(`row${idx+1}`);
+            row.forEach(key => {
+                const btn = document.createElement('button');
+                btn.className = 'key' + (key.length > 1 ? ' large' : '');
+                btn.textContent = key;
+                btn.onclick = () => handleInput(key);
+                rowEl.appendChild(btn);
             });
-        }
+        });
 
-        // ==========================================
-        // LÓGICA DE ENTRADA DE DATOS
-        // ==========================================
-        function handleKeyPress(key) {
+        function handleInput(key) {
             if (gameOver) return;
 
             if (key === 'BORRAR') {
                 if (currentCol > 0) {
                     currentCol--;
-                    board[currentRow][currentCol] = '';
-                    updateBoard();
+                    boardState[currentRow][currentCol] = '';
+                    render();
                 }
             } else if (key === 'ENVIAR') {
-                if (currentCol === COLS) {
-                    checkGuess();
-                } else {
-                    // Animación de error si faltan letras
-                    const rowCells = getRowCells(currentRow);
-                    rowCells.forEach(cell => {
-                        cell.classList.remove('shake');
-                        void cell.offsetWidth; // Trigger reflow
-                        cell.classList.add('shake');
-                    });
-                    tg.HapticFeedback.notificationOccurred('warning');
-                }
-            } else {
-                if (currentCol < COLS) {
-                    board[currentRow][currentCol] = key;
-                    currentCol++;
-                    updateBoard();
-                }
+                if (currentCol === 5) checkWord();
+                else shakeRow();
+            } else if (currentCol < 5) {
+                boardState[currentRow][currentCol] = key;
+                currentCol++;
+                render();
             }
         }
 
-        function updateBoard() {
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
+        function render() {
+            for (let r = 0; r < 6; r++) {
+                for (let c = 0; c < 5; c++) {
                     const cell = document.getElementById(`cell-${r}-${c}`);
-                    cell.textContent = board[r][c];
+                    cell.textContent = boardState[r][c];
                 }
             }
         }
 
-        function getRowCells(row) {
-            const cells = [];
-            for (let c = 0; c < COLS; c++) {
-                cells.push(document.getElementById(`cell-${row}-${c}`));
-            }
-            return cells;
-        }
+        function checkWord() {
+            const guess = boardState[currentRow].join('').toLowerCase();
 
-        // ==========================================
-        // LÓGICA DE VALIDACIÓN Y COLORES
-        // ==========================================
-        function checkGuess() {
-            const guess = board[currentRow].join('');
-            const rowCells = getRowCells(currentRow);
-            
-            // Lógica de Wordle (2 pasadas para manejar letras repetidas correctamente)
-            let secretLetterCounts = {};
-            for (let char of SECRET_WORD) {
-                secretLetterCounts[char] = (secretLetterCounts[char] || 0) + 1;
+            // VALIDACIÓN CON TU DICCIONARIO
+            if (!DICCIONARIO.includes(guess)) {
+                tg.showAlert("Esa palabra no vale ❌");
+                shakeRow();
+                return;
             }
 
-            let statuses = Array(COLS).fill('absent');
+            // Colorear
+            const guessUpper = guess.toUpperCase();
+            const rowCells = [];
+            for(let i=0; i<5; i++) rowCells.push(document.getElementById(`cell-${currentRow}-${i}`));
 
-            // Primera pasada: Encontrar las correctas (Verdes)
-            for (let i = 0; i < COLS; i++) {
-                if (guess[i] === SECRET_WORD[i]) {
+            let checkSecret = SECRET_WORD;
+            const statuses = Array(5).fill('absent');
+
+            for(let i=0; i<5; i++) {
+                if(guessUpper[i] === SECRET_WORD[i]) {
                     statuses[i] = 'correct';
-                    secretLetterCounts[guess[i]] -= 1;
+                    checkSecret = checkSecret.replace(guessUpper[i], '_');
                 }
             }
 
-            // Segunda pasada: Encontrar las presentes (Amarillas)
-            for (let i = 0; i < COLS; i++) {
-                if (statuses[i] === 'absent' && secretLetterCounts[guess[i]] > 0) {
+            for(let i=0; i<5; i++) {
+                if(statuses[i] !== 'correct' && checkSecret.includes(guessUpper[i])) {
                     statuses[i] = 'present';
-                    secretLetterCounts[guess[i]] -= 1;
+                    checkSecret = checkSecret.replace(guessUpper[i], '_');
                 }
             }
 
-            // Aplicar colores al tablero y al teclado
-            for (let i = 0; i < COLS; i++) {
-                const letter = guess[i];
-                const status = statuses[i];
-                
-                // Colorear casilla
-                rowCells[i].classList.add(status);
-                
-                // Colorear tecla (solo actualiza si es un estado "mejor")
-                const keyElement = document.getElementById(`key-${letter}`);
-                if (!keyElement.classList.contains('correct')) {
-                    if (status === 'correct') {
-                        keyElement.classList.remove('present', 'absent');
-                        keyElement.classList.add('correct');
-                    } else if (status === 'present' && !keyElement.classList.contains('present')) {
-                        keyElement.classList.remove('absent');
-                        keyElement.classList.add('present');
-                    } else if (status === 'absent' && !keyElement.classList.contains('present')) {
-                        keyElement.classList.add('absent');
-                    }
-                }
-            }
+            statuses.forEach((status, i) => rowCells[i].classList.add(status));
 
-            // Comprobar victoria o derrota
-            if (guess === SECRET_WORD) {
+            if (guessUpper === SECRET_WORD) {
                 gameOver = true;
-                tg.HapticFeedback.notificationOccurred('success');
-                setTimeout(() => enviarResultadoAlBot(currentRow + 1), 1500);
-            } else if (currentRow === ROWS - 1) {
+                setTimeout(() => finish(currentRow + 1), 1000);
+            } else if (currentRow === 5) {
                 gameOver = true;
-                tg.HapticFeedback.notificationOccurred('error');
-                setTimeout(() => enviarResultadoAlBot('X'), 1500);
+                setTimeout(() => finish('X'), 1000);
             } else {
                 currentRow++;
                 currentCol = 0;
             }
         }
 
-        // ==========================================
-        // COMUNICACIÓN CON EL BOT DE TELEGRAM
-        // ==========================================
-        function enviarResultadoAlBot(intentos) {
-            // Se envía el dato como string (ej: "3" o "X")
-            tg.sendData(intentos.toString());
-            // Opcional: cerrar la web app explícitamente
-            tg.close();
+        function shakeRow() {
+            for(let i=0; i<5; i++) {
+                const cell = document.getElementById(`cell-${currentRow}-${i}`);
+                cell.classList.add('shake');
+                setTimeout(() => cell.classList.remove('shake'), 400);
+            }
+            tg.HapticFeedback.notificationOccurred('error');
         }
 
-        // Iniciar el juego al cargar
-        initGame();
+        function finish(result) {
+            tg.sendData(result.toString());
+            tg.close();
+        }
     </script>
 </body>
 </html>
-
-
-
